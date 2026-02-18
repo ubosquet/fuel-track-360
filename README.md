@@ -17,6 +17,10 @@ Fuel-Track-360 is an enterprise SaaS platform for fuel logistics management, bui
 - **Offline-First Architecture** — Full functionality with zero internet access
 - **Multilingual** — French (primary), English, Haitian Creole
 
+## 📚 Documentation
+
+For detailed technical documentation, including API modules, frontend structure, and entity relationships, please refer to [Technical Documentation](docs/TECHNICAL_DOCUMENTATION.md).
+
 ## 🏗️ Architecture
 
 ```

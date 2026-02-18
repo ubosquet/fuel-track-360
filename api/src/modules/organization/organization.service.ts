@@ -30,14 +30,46 @@ export class OrganizationService {
         return this.orgRepository.save(org);
     }
 
+    async updateOrganization(
+        id: string,
+        updates: { name?: string; country?: string; currency?: string; timezone?: string },
+    ): Promise<OrganizationEntity> {
+        const org = await this.findById(id);
+        Object.assign(org, updates);
+        const saved = await this.orgRepository.save(org);
+        this.logger.log(`Organization updated: ${saved.id} (${saved.name})`);
+        return saved;
+    }
+
     async getStations(organizationId: string, type?: string): Promise<StationEntity[]> {
         const where: any = { organization_id: organizationId, is_active: true };
         if (type) where.type = type;
         return this.stationRepository.find({ where, order: { name: 'ASC' } });
     }
 
+    async getStationById(id: string, organizationId: string): Promise<StationEntity> {
+        const station = await this.stationRepository.findOne({
+            where: { id, organization_id: organizationId },
+        });
+        if (!station) throw new NotFoundException(`Station ${id} not found`);
+        return station;
+    }
+
     async createStation(data: Partial<StationEntity>): Promise<StationEntity> {
         const station = this.stationRepository.create(data);
         return this.stationRepository.save(station);
     }
+
+    async updateStation(
+        id: string,
+        organizationId: string,
+        updates: Partial<StationEntity>,
+    ): Promise<StationEntity> {
+        const station = await this.getStationById(id, organizationId);
+        Object.assign(station, updates);
+        const saved = await this.stationRepository.save(station);
+        this.logger.log(`Station updated: ${saved.id} (${saved.name})`);
+        return saved;
+    }
 }
+

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from './entities/user.entity';
@@ -65,14 +65,68 @@ export class AuthService {
         });
     }
 
-    async getUsersByOrganization(organizationId: string): Promise<UserEntity[]> {
+    async getUsersByOrganization(
+        organizationId: string,
+        filters?: { role?: string; is_active?: boolean },
+    ): Promise<UserEntity[]> {
+        const where: any = { organization_id: organizationId };
+        if (filters?.role) where.role = filters.role;
+        if (filters?.is_active !== undefined) where.is_active = filters.is_active;
+        // If no is_active filter, show all (for management UI)
         return this.userRepository.find({
-            where: { organization_id: organizationId, is_active: true },
+            where,
             order: { full_name: 'ASC' },
         });
+    }
+
+    async updateUser(
+        id: string,
+        organizationId: string,
+        updates: {
+            full_name?: string;
+            role?: string;
+            phone?: string;
+            email?: string;
+            preferred_lang?: string;
+            is_active?: boolean;
+        },
+    ): Promise<UserEntity> {
+        const user = await this.userRepository.findOne({
+            where: { id, organization_id: organizationId },
+        });
+
+        if (!user) {
+            throw new NotFoundException(`User ${id} not found`);
+        }
+
+        // Prevent deactivation of the last OWNER
+        if (updates.is_active === false && user.role === 'OWNER') {
+            const ownerCount = await this.userRepository.count({
+                where: { organization_id: organizationId, role: 'OWNER' as any, is_active: true },
+            });
+            if (ownerCount <= 1) {
+                throw new ForbiddenException('Cannot deactivate the last owner of the organization');
+            }
+        }
+
+        // Prevent role change away from OWNER if last owner
+        if (updates.role && updates.role !== 'OWNER' && user.role === 'OWNER') {
+            const ownerCount = await this.userRepository.count({
+                where: { organization_id: organizationId, role: 'OWNER' as any, is_active: true },
+            });
+            if (ownerCount <= 1) {
+                throw new ForbiddenException('Cannot change the role of the last owner');
+            }
+        }
+
+        Object.assign(user, updates);
+        const saved = await this.userRepository.save(user);
+        this.logger.log(`User updated: ${saved.id} (${saved.full_name}, role: ${saved.role}, active: ${saved.is_active})`);
+        return saved;
     }
 
     async updateLastLogin(userId: string): Promise<void> {
         await this.userRepository.update(userId, { last_login_at: new Date() });
     }
 }
+

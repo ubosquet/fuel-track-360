@@ -64,7 +64,7 @@ export class ManifestEntity {
     dest_station: StationEntity;
 
     @Column({ type: 'varchar', length: 20 })
-    product_type: 'DIESEL' | 'GASOLINE_91' | 'GASOLINE_95' | 'KEROSENE';
+    product_type: 'DIESEL' | 'GASOLINE' | 'KEROSENE' | 'LPG';
 
     @Column({ type: 'decimal', precision: 12, scale: 3, nullable: true })
     volume_loaded_liters: number;
@@ -83,7 +83,8 @@ export class ManifestEntity {
         | 'ARRIVED'
         | 'DISCHARGING'
         | 'COMPLETED'
-        | 'FLAGGED';
+        | 'FLAGGED'
+        | 'CANCELLED';
 
     @Column({ type: 'timestamptz', nullable: true })
     loaded_at: Date;

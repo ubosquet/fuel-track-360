@@ -11,6 +11,10 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
+  // ── Body size limit: prevent oversized sync payloads ──
+  app.use(require('express').json({ limit: '5mb' }));
+  app.use(require('express').urlencoded({ extended: true, limit: '5mb' }));
+
   const configService = app.get(ConfigService);
   const port = configService.get<number>('APP_PORT', 8080);
   const prefix = configService.get<string>('API_PREFIX', 'api/v1');

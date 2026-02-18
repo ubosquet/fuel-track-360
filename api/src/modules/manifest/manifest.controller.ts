@@ -16,6 +16,9 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
+import { CreateManifestDto } from './dto/create-manifest.dto';
+import { UpdateManifestStatusDto } from './dto/update-manifest.dto';
+
 @ApiTags('manifest')
 @ApiBearerAuth()
 @Controller('manifests')
@@ -27,17 +30,7 @@ export class ManifestController {
     @Roles('DISPATCHER', 'SUPERVISOR', 'ADMIN', 'OWNER')
     @ApiOperation({ summary: 'Create a manifest (requires APPROVED S2L)' })
     async create(
-        @Body()
-        body: {
-            s2l_id: string;
-            truck_id: string;
-            origin_station_id: string;
-            dest_station_id: string;
-            product_type: string;
-            volume_loaded_liters?: number;
-            sync_id?: string;
-            offline_created?: boolean;
-        },
+        @Body() body: CreateManifestDto,
         @CurrentUser() user: any,
     ) {
         return this.manifestService.create(body, user.user_id, user.organization_id);
@@ -65,12 +58,7 @@ export class ManifestController {
     @ApiOperation({ summary: 'Update manifest status' })
     async updateStatus(
         @Param('id', ParseUUIDPipe) id: string,
-        @Body()
-        body: {
-            status: string;
-            volume_loaded_liters?: number;
-            volume_discharged_liters?: number;
-        },
+        @Body() body: UpdateManifestStatusDto,
         @CurrentUser() user: any,
     ) {
         return this.manifestService.updateStatus(

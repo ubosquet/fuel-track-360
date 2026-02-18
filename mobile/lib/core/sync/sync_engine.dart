@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import '../database/database.dart';
 import '../../features/auth/data/auth_repository.dart';
+import '../services/photo_upload_service.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 
@@ -13,32 +14,43 @@ import 'package:dio/dio.dart';
 /// 3. When connectivity is restored, SyncEngine processes the queue
 /// 4. Server returns status per sync_id (COMPLETED/FAILED/CONFLICT)
 /// 5. Completed items are marked as synced; failures retry with backoff
+///
+/// Phase 2: Now also handles photo file uploads via PhotoUploadService
 class SyncEngine {
   final AppDatabase db;
   final Dio dio;
   final Connectivity connectivity;
+  final PhotoUploadService photoUploadService;
 
   Timer? _syncTimer;
   bool _isSyncing = false;
-  static const Duration _syncInterval = Duration(seconds: 30);
+  int _consecutiveFailures = 0;
   static const int _maxRetries = 5;
   static const int _batchSize = 50;
+
+  // ── Exponential backoff configuration ──
+  static const Duration _baseInterval = Duration(seconds: 30);
+  static const Duration _maxInterval = Duration(minutes: 15);
 
   SyncEngine({
     required this.db,
     required this.dio,
     required this.connectivity,
+    required this.photoUploadService,
   });
 
-  /// Start the periodic sync engine
+  /// Start the periodic sync engine with exponential backoff
   void start() {
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(_syncInterval, (_) => _processQueue());
+    _consecutiveFailures = 0;
+    _scheduleNextSync();
 
-    // Also sync immediately when connectivity changes
+    // Also sync immediately when connectivity changes from offline → online
     connectivity.onConnectivityChanged.listen((results) {
       if (results.any((r) => r != ConnectivityResult.none)) {
+        _consecutiveFailures = 0; // Reset backoff on reconnect
         _processQueue();
+        _processPhotoQueue();
       }
     });
   }
@@ -46,6 +58,33 @@ class SyncEngine {
   void stop() {
     _syncTimer?.cancel();
     _syncTimer = null;
+  }
+
+  /// Trigger an immediate sync cycle (e.g., after a new S2L submission)
+  void syncNow() {
+    _consecutiveFailures = 0;
+    _syncTimer?.cancel();
+    _processQueue();
+    _processPhotoQueue();
+  }
+
+  /// Schedule the next sync with exponential backoff
+  void _scheduleNextSync() {
+    _syncTimer?.cancel();
+    final delay = _calculateBackoff();
+    _syncTimer = Timer(delay, () async {
+      await _processQueue();
+      await _processPhotoQueue();
+      _scheduleNextSync(); // Re-schedule after completion
+    });
+  }
+
+  /// Calculate backoff delay: 30s → 1m → 2m → 4m → 8m → 15m (capped)
+  Duration _calculateBackoff() {
+    if (_consecutiveFailures == 0) return _baseInterval;
+    final multiplier = 1 << _consecutiveFailures.clamp(0, 5); // 2^failures
+    final delay = _baseInterval * multiplier;
+    return delay > _maxInterval ? _maxInterval : delay;
   }
 
   /// Enqueue an offline operation
@@ -86,10 +125,13 @@ class SyncEngine {
         ..limit(_batchSize))
         .get();
 
-      if (pending.isEmpty) return;
+      if (pending.isEmpty) {
+        _consecutiveFailures = 0; // Nothing to sync = no failures
+        return;
+      }
 
       // Build batch payload
-      final operations = pending.map((item) => {
+      final operations = pending.map((item) {
         return {
           'sync_id': item.syncId,
           'operation': item.operation,
@@ -138,11 +180,56 @@ class SyncEngine {
               ));
           }
         }
+        _consecutiveFailures = 0; // Success — reset backoff
       }
     } catch (e) {
-      // Network error — will retry on next cycle
+      // Network error — will retry with increasing backoff
+      _consecutiveFailures++;
     } finally {
       _isSyncing = false;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════
+  // Phase 2: Photo Upload Queue
+  // ════════════════════════════════════════════════════════════
+
+  /// Process unsynced photos — uploads the actual file to the API
+  Future<void> _processPhotoQueue() async {
+    final connectivityResult = await connectivity.checkConnectivity();
+    if (connectivityResult.every((r) => r == ConnectivityResult.none)) return;
+
+    try {
+      // Find all unsynced photos
+      final unsyncedPhotos = await (db.select(db.s2lPhotos)
+        ..where((t) => t.isSynced.equals(false))
+        ..orderBy([(t) => OrderingTerm.asc(t.capturedAt)])
+        ..limit(5)) // Upload max 5 photos per cycle to save battery
+        .get();
+
+      for (final photo in unsyncedPhotos) {
+        try {
+          await photoUploadService.uploadS2LPhoto(
+            s2lId: photo.s2lId,
+            localPath: photo.localPath,
+            photoType: photo.photoType,
+            capturedAt: photo.capturedAt,
+            gpsLat: photo.gpsLat,
+            gpsLng: photo.gpsLng,
+          );
+
+          // Mark as synced on success
+          await (db.update(db.s2lPhotos)
+            ..where((t) => t.id.equals(photo.id)))
+            .write(const S2lPhotosCompanion(isSynced: Value(true)));
+        } catch (e) {
+          // Individual photo failure — continue with the rest
+          // Will be retried on next cycle
+          break; // If one fails, likely connectivity issue — stop trying
+        }
+      }
+    } catch (e) {
+      // Query error — will retry on next cycle
     }
   }
 
@@ -174,10 +261,14 @@ class SyncEngine {
     final failed = await (db.select(db.syncQueue)
       ..where((t) => t.retryCount.isBiggerOrEqual(const Variable(_maxRetries))))
       .get();
+    final unsyncedPhotos = await (db.select(db.s2lPhotos)
+      ..where((t) => t.isSynced.equals(false)))
+      .get();
 
     return {
       'pending': pending.length,
       'failed': failed.length,
+      'unsynced_photos': unsyncedPhotos.length,
     };
   }
 }
