@@ -1,0 +1,106 @@
+# ════════════════════════════════════════════════════════════
+# Fuel-Track-360 — Local Development Stack
+# ════════════════════════════════════════════════════════════
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose logs -f api    # Tail API logs
+#   docker compose down -v        # Stop + remove volumes
+# ════════════════════════════════════════════════════════════
+
+services:
+  # ── PostgreSQL 15 ──────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: ft360-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ft360
+      POSTGRES_USER: ft360_app
+      POSTGRES_PASSWORD: ft360_dev_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ft360_app -d ft360" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── NestJS API ─────────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+      target: development
+    container_name: ft360-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      APP_PORT: 3000
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ft360
+      DATABASE_USER: ft360_app
+      DATABASE_PASSWORD: ft360_dev_password
+      DATABASE_SSL: "false"
+      DATABASE_SYNC: "false"
+      DATABASE_LOGGING: "true"
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-ft360-dev}
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME:-ft360-uploads-dev}
+      CORS_ORIGINS: "http://localhost:3001,http://localhost:3000"
+    ports:
+      - "3000:3000"
+      - "9229:9229" # Node.js debugger
+    volumes:
+      - ./api/src:/app/src
+      - ./api/node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "npm run migration:run && npm run start:dev"
+
+  # ── Next.js Web Dashboard ─────────────────────────────────
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    container_name: ft360-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api/v1
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${FIREBASE_API_KEY:-}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${FIREBASE_AUTH_DOMAIN:-}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-ft360-dev}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET:-}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${FIREBASE_MESSAGING_SENDER_ID:-}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${FIREBASE_APP_ID:-}
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./web/src:/app/src
+      - ./web/public:/app/public
+    depends_on:
+      - api
+
+  # ── pgAdmin (optional database UI) ────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ft360-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@ft360.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+    driver: local

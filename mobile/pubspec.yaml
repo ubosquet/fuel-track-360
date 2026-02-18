@@ -1,0 +1,86 @@
+name: fuel_track_360
+description: "Fuel-Track-360 Mobile — Offline-first fuel logistics for Haiti"
+
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ── State Management ──
+  flutter_riverpod: ^2.5.0
+  riverpod_annotation: ^2.4.0
+
+  # ── Database (Offline) ──
+  drift: ^2.14.0
+  sqlite3_flutter_libs: ^0.5.0
+
+  # ── Networking ──
+  dio: ^5.4.0
+  connectivity_plus: ^6.0.0
+
+  # ── Firebase ──
+  firebase_core: ^3.2.0
+  firebase_auth: ^5.1.0
+  firebase_messaging: ^15.0.0
+  firebase_storage: ^12.1.0
+
+  # ── GPS & Maps ──
+  geolocator: ^12.0.0
+  google_maps_flutter: ^2.9.0
+  geocoding: ^3.0.0
+
+  # ── Camera & Images ──
+  camera: ^0.11.0
+  image_picker: ^1.0.0
+  image_cropper: ^7.0.0
+
+  # ── Signature ──
+  signature_pad: ^5.0.0
+
+  # ── Internationalization ──
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.19.0
+
+  # ── UI Components ──
+  cupertino_icons: ^1.0.2
+  flutter_svg: ^2.0.0
+  shimmer: ^3.0.0
+  cached_network_image: ^3.3.0
+  lottie: ^3.1.0
+  fl_chart: ^0.69.0
+
+  # ── Utilities ──
+  uuid: ^4.3.0
+  json_annotation: ^4.9.0
+  freezed_annotation: ^2.4.0
+  path_provider: ^2.1.0
+  package_info_plus: ^8.0.0
+  permission_handler: ^11.3.0
+  shared_preferences: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+  # ── Code Gen ──
+  build_runner: ^2.4.0
+  drift_dev: ^2.14.0
+  freezed: ^2.5.0
+  json_serializable: ^6.8.0
+  riverpod_generator: ^2.4.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  assets:
+    - assets/images/
+    - assets/lottie/
+    - assets/i18n/
