@@ -6,10 +6,17 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
+
+  // ── Security Middleware ──
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow CORS for Swagger/Frontend
+    contentSecurityPolicy: false, // Disabled for now to ensure Swagger UI compatibility
+  }));
 
   // ── Body size limit: prevent oversized sync payloads ──
   app.use(require('express').json({ limit: '5mb' }));
