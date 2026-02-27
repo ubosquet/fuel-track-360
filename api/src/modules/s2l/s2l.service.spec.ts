@@ -11,6 +11,7 @@ import { AuditService } from '../audit/audit.service';
 // ────────────────────────────────────────────────────────────
 
 const ORG_ID = 'a0000000-0000-0000-0000-000000000001';
+const OTHER_ORG = 'a0000000-0000-0000-0000-000000000002';
 const USER_ID = 'u0000000-0000-0000-0000-000000000001';
 const TRUCK_ID = 'c0000000-0000-0000-0000-000000000001';
 const STATION_ID = 'b0000000-0000-0000-0000-000000000001';
@@ -162,6 +163,36 @@ describe('S2LService', () => {
                 expect.objectContaining({ all_items_pass: false }),
             );
         });
+
+        it('M5: uses the actorRole passed by the caller in the audit log', async () => {
+            s2lRepo.findOne.mockResolvedValueOnce(null);
+
+            await service.create(
+                { truck_id: TRUCK_ID, station_id: STATION_ID, checklist_data: makePassingChecklist() },
+                USER_ID,
+                ORG_ID,
+                'SUPERVISOR',
+            );
+
+            expect(auditSvc.log).toHaveBeenCalledWith(
+                expect.objectContaining({ actor_role: 'SUPERVISOR' }),
+            );
+        });
+
+        it('M5: defaults actor_role to DRIVER when not provided', async () => {
+            s2lRepo.findOne.mockResolvedValueOnce(null);
+
+            await service.create(
+                { truck_id: TRUCK_ID, station_id: STATION_ID, checklist_data: makePassingChecklist() },
+                USER_ID,
+                ORG_ID,
+                // no actorRole — should default to 'DRIVER'
+            );
+
+            expect(auditSvc.log).toHaveBeenCalledWith(
+                expect.objectContaining({ actor_role: 'DRIVER' }),
+            );
+        });
     });
 
     // ──────────────────────────────────────────
@@ -172,89 +203,85 @@ describe('S2LService', () => {
         const signatureUrl = 'https://storage.example.com/signatures/sig-001.png';
 
         it('RULE: rejects if status is not DRAFT', async () => {
-            s2lRepo.findOne.mockResolvedValue(
-                makeS2LEntity({ status: 'SUBMITTED' }),
-            );
+            s2lRepo.findOne.mockResolvedValue(makeS2LEntity({ status: 'SUBMITTED' }));
 
             await expect(
-                service.submit('s2l-001', USER_ID, signatureUrl),
+                service.submit('s2l-001', ORG_ID, USER_ID, 'DRIVER', signatureUrl),
             ).rejects.toThrow(BadRequestException);
         });
 
         it('RULE 1: rejects if any checklist item is FALSE', async () => {
             s2lRepo.findOne.mockResolvedValue(
-                makeS2LEntity({
-                    status: 'DRAFT',
-                    checklist_data: makeFailingChecklist(),
-                }),
+                makeS2LEntity({ status: 'DRAFT', checklist_data: makeFailingChecklist() }),
             );
 
             await expect(
-                service.submit('s2l-001', USER_ID, signatureUrl),
+                service.submit('s2l-001', ORG_ID, USER_ID, 'DRIVER', signatureUrl),
             ).rejects.toThrow(/checklist items must be validated/i);
         });
 
         it('RULE 2: rejects if fewer than 3 photos', async () => {
-            s2lRepo.findOne.mockResolvedValue(
-                makeS2LEntity({ status: 'DRAFT' }),
-            );
+            s2lRepo.findOne.mockResolvedValue(makeS2LEntity({ status: 'DRAFT' }));
             photoRepo.find.mockResolvedValue([{ id: '1' }, { id: '2' }]); // only 2
 
             await expect(
-                service.submit('s2l-001', USER_ID, signatureUrl),
+                service.submit('s2l-001', ORG_ID, USER_ID, 'DRIVER', signatureUrl),
             ).rejects.toThrow(/Minimum 3 photos/);
         });
 
         it('RULE 3: rejects if signature is empty', async () => {
-            s2lRepo.findOne.mockResolvedValue(
-                makeS2LEntity({ status: 'DRAFT' }),
-            );
+            s2lRepo.findOne.mockResolvedValue(makeS2LEntity({ status: 'DRAFT' }));
             photoRepo.find.mockResolvedValue([{ id: '1' }, { id: '2' }, { id: '3' }]);
 
             await expect(
-                service.submit('s2l-001', USER_ID, ''),
+                service.submit('s2l-001', ORG_ID, USER_ID, 'DRIVER', ''),
             ).rejects.toThrow(/signature/i);
         });
 
         it('RULE 5: rejects if S2L is older than 24 hours', async () => {
             const expiredDate = new Date(Date.now() - 25 * 60 * 60 * 1000); // 25h ago
             s2lRepo.findOne
-                .mockResolvedValueOnce(
-                    makeS2LEntity({ status: 'DRAFT', created_at: expiredDate }),
-                )
-                .mockResolvedValueOnce(
-                    makeS2LEntity({ status: 'EXPIRED' }),
-                );
+                .mockResolvedValueOnce(makeS2LEntity({ status: 'DRAFT', created_at: expiredDate }))
+                .mockResolvedValueOnce(makeS2LEntity({ status: 'EXPIRED' }));
             photoRepo.find.mockResolvedValue([{ id: '1' }, { id: '2' }, { id: '3' }]);
 
             await expect(
-                service.submit('s2l-001', USER_ID, signatureUrl),
+                service.submit('s2l-001', ORG_ID, USER_ID, 'DRIVER', signatureUrl),
             ).rejects.toThrow(/expired/i);
         });
 
         it('SUCCESS: submits when ALL rules pass', async () => {
             const freshDate = new Date(Date.now() - 1 * 60 * 60 * 1000); // 1h ago
             s2lRepo.findOne
-                .mockResolvedValueOnce(
-                    makeS2LEntity({ status: 'DRAFT', created_at: freshDate }),
-                )
-                .mockResolvedValueOnce(
-                    makeS2LEntity({ status: 'SUBMITTED', submitted_at: new Date() }),
-                );
+                .mockResolvedValueOnce(makeS2LEntity({ status: 'DRAFT', created_at: freshDate }))
+                .mockResolvedValueOnce(makeS2LEntity({ status: 'SUBMITTED', submitted_at: new Date() }));
             photoRepo.find.mockResolvedValue([{ id: '1' }, { id: '2' }, { id: '3' }]);
 
-            const result = await service.submit('s2l-001', USER_ID, signatureUrl);
+            const result = await service.submit('s2l-001', ORG_ID, USER_ID, 'DRIVER', signatureUrl);
 
             expect(s2lRepo.update).toHaveBeenCalledWith(
                 's2l-001',
-                expect.objectContaining({
-                    status: 'SUBMITTED',
-                    all_items_pass: true,
-                }),
+                expect.objectContaining({ status: 'SUBMITTED', all_items_pass: true }),
             );
             expect(auditSvc.log).toHaveBeenCalledWith(
+                expect.objectContaining({ event_type: 'S2L_SUBMITTED' }),
+            );
+        });
+
+        it('M1: findOneOrFail includes organization_id in DB query', async () => {
+            s2lRepo.findOne.mockResolvedValue(makeS2LEntity({ status: 'DRAFT' }));
+            photoRepo.find.mockResolvedValue([{ id: '1' }, { id: '2' }, { id: '3' }]);
+            // Also mock second findOneOrFail for the return call
+            s2lRepo.findOne
+                .mockResolvedValueOnce(makeS2LEntity({ status: 'DRAFT' }))
+                .mockResolvedValueOnce(makeS2LEntity({ status: 'SUBMITTED' }));
+
+            await service.submit('s2l-001', ORG_ID, USER_ID, 'DRIVER', signatureUrl);
+
+            // First repo call (findOneOrFail) must include organization_id
+            expect(s2lRepo.findOne).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    event_type: 'S2L_SUBMITTED',
+                    where: expect.objectContaining({ id: 's2l-001', organization_id: ORG_ID }),
                 }),
             );
         });
@@ -266,12 +293,10 @@ describe('S2LService', () => {
 
     describe('review()', () => {
         it('rejects review if status is not SUBMITTED', async () => {
-            s2lRepo.findOne.mockResolvedValue(
-                makeS2LEntity({ status: 'DRAFT' }),
-            );
+            s2lRepo.findOne.mockResolvedValue(makeS2LEntity({ status: 'DRAFT' }));
 
             await expect(
-                service.review('s2l-001', USER_ID, 'SUPERVISOR', 'APPROVED'),
+                service.review('s2l-001', ORG_ID, USER_ID, 'SUPERVISOR', 'APPROVED'),
             ).rejects.toThrow(BadRequestException);
         });
 
@@ -280,19 +305,14 @@ describe('S2LService', () => {
                 .mockResolvedValueOnce(makeS2LEntity({ status: 'SUBMITTED' }))
                 .mockResolvedValueOnce(makeS2LEntity({ status: 'APPROVED' }));
 
-            const result = await service.review('s2l-001', USER_ID, 'SUPERVISOR', 'APPROVED', 'Looks good');
+            await service.review('s2l-001', ORG_ID, USER_ID, 'SUPERVISOR', 'APPROVED', 'Looks good');
 
             expect(s2lRepo.update).toHaveBeenCalledWith(
                 's2l-001',
-                expect.objectContaining({
-                    status: 'APPROVED',
-                    review_notes: 'Looks good',
-                }),
+                expect.objectContaining({ status: 'APPROVED', review_notes: 'Looks good' }),
             );
             expect(auditSvc.log).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    event_type: 'S2L_APPROVED',
-                }),
+                expect.objectContaining({ event_type: 'S2L_APPROVED', actor_role: 'SUPERVISOR' }),
             );
         });
 
@@ -301,12 +321,10 @@ describe('S2LService', () => {
                 .mockResolvedValueOnce(makeS2LEntity({ status: 'SUBMITTED' }))
                 .mockResolvedValueOnce(makeS2LEntity({ status: 'REJECTED' }));
 
-            await service.review('s2l-001', USER_ID, 'SUPERVISOR', 'REJECTED', 'Broken seal');
+            await service.review('s2l-001', ORG_ID, USER_ID, 'SUPERVISOR', 'REJECTED', 'Broken seal');
 
             expect(auditSvc.log).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    event_type: 'S2L_REJECTED',
-                }),
+                expect.objectContaining({ event_type: 'S2L_REJECTED' }),
             );
         });
     });
@@ -319,8 +337,8 @@ describe('S2LService', () => {
         it('adds a photo to a DRAFT S2L', async () => {
             s2lRepo.findOne.mockResolvedValue(makeS2LEntity({ status: 'DRAFT' }));
 
-            const result = await service.addPhoto('s2l-001', {
-                photo_type: 'TRUCK_FRONT',
+            await service.addPhoto('s2l-001', ORG_ID, {
+                photo_type: 'FRONT',
                 storage_path: 'gs://bucket/photos/front.jpg',
                 file_size_bytes: 245000,
                 gps_lat: 18.5393,
@@ -336,8 +354,8 @@ describe('S2LService', () => {
             s2lRepo.findOne.mockResolvedValue(makeS2LEntity({ status: 'SUBMITTED' }));
 
             await expect(
-                service.addPhoto('s2l-001', {
-                    photo_type: 'TRUCK_FRONT',
+                service.addPhoto('s2l-001', ORG_ID, {
+                    photo_type: 'FRONT',
                     storage_path: 'gs://bucket/photos/front.jpg',
                     captured_at: new Date(),
                 }),
@@ -346,24 +364,45 @@ describe('S2LService', () => {
     });
 
     // ──────────────────────────────────────────
-    // QUERY
+    // findOneOrFail — M1: org isolation
     // ──────────────────────────────────────────
 
-    describe('findOneOrFail()', () => {
+    describe('findOneOrFail() — M1 org isolation', () => {
         it('throws NotFoundException if S2L does not exist', async () => {
             s2lRepo.findOne.mockResolvedValue(null);
-
-            await expect(service.findOneOrFail('nonexistent-id')).rejects.toThrow(
+            await expect(service.findOneOrFail('nonexistent-id', ORG_ID)).rejects.toThrow(
                 NotFoundException,
             );
         });
 
-        it('returns the S2L with relations when found', async () => {
+        it('returns the S2L when found in org', async () => {
             const entity = makeS2LEntity();
             s2lRepo.findOne.mockResolvedValue(entity);
-
-            const result = await service.findOneOrFail('s2l-001');
+            const result = await service.findOneOrFail('s2l-001', ORG_ID);
             expect(result).toEqual(entity);
+        });
+
+        it('includes organization_id in the WHERE clause when provided', async () => {
+            s2lRepo.findOne.mockResolvedValue(makeS2LEntity());
+            await service.findOneOrFail('s2l-001', ORG_ID);
+            expect(s2lRepo.findOne).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: expect.objectContaining({
+                        id: 's2l-001',
+                        organization_id: ORG_ID,
+                    }),
+                }),
+            );
+        });
+
+        it('omits organization_id from WHERE when called without org (internal trust)', async () => {
+            s2lRepo.findOne.mockResolvedValue(makeS2LEntity());
+            await service.findOneOrFail('s2l-001'); // no org — internal caller
+            expect(s2lRepo.findOne).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: expect.not.objectContaining({ organization_id: expect.anything() }),
+                }),
+            );
         });
     });
 });

@@ -58,14 +58,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         });
                     }
                 } catch {
-                    // API may not be available in dev — use Firebase user data
+                    // API may not be available — do NOT grant elevated roles as fallback.
+                    // 'UNKNOWN' role will not pass any @Roles guard checks in the UI.
+                    // The API always re-enforces roles server-side via the JWT anyway.
+                    console.warn('[AuthContext] API unreachable — user role set to UNKNOWN');
                     setUser({
                         uid: fbUser.uid,
                         email: fbUser.email,
                         displayName: fbUser.displayName,
-                        role: 'ADMIN',
+                        role: 'UNKNOWN',
                         organizationId: '',
-                        organizationName: 'Demo Org',
+                        organizationName: '',
                     });
                 }
             } else {

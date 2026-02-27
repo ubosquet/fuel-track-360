@@ -1,6 +1,12 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsEnum, IsUUID, IsPhoneNumber } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsEnum, IsPhoneNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+/**
+ * DTO for creating a new user.
+ * NOTE: `organization_id` is intentionally absent — the controller always
+ * forces the new user into the caller's own organization to prevent
+ * cross-org injection. The org is set server-side from the JWT.
+ */
 export class CreateUserDto {
     @ApiProperty({ description: 'Firebase Auth UID' })
     @IsString()
@@ -14,14 +20,12 @@ export class CreateUserDto {
 
     @ApiProperty({
         description: 'Role of the user',
-        enum: ['OWNER', 'ADMIN', 'SUPERVISOR', 'DISPATCHER', 'FINANCE', 'DRIVER']
+        enum: ['ADMIN', 'SUPERVISOR', 'DISPATCHER', 'FINANCE', 'DRIVER'],
+        // NOTE: OWNER role cannot be assigned via this endpoint — OWNERs must
+        // be seeded directly or promoted via a separate privileged operation.
     })
-    @IsEnum(['OWNER', 'ADMIN', 'SUPERVISOR', 'DISPATCHER', 'FINANCE', 'DRIVER'])
+    @IsEnum(['ADMIN', 'SUPERVISOR', 'DISPATCHER', 'FINANCE', 'DRIVER'])
     role: string;
-
-    @ApiProperty({ description: 'Organization ID this user belongs to' })
-    @IsUUID()
-    organization_id: string;
 
     @ApiPropertyOptional({ description: 'Email address' })
     @IsOptional()
@@ -30,10 +34,10 @@ export class CreateUserDto {
 
     @ApiPropertyOptional({ description: 'Phone number' })
     @IsOptional()
-    @IsPhoneNumber() // Note: This requires 'libphonenumber-js' usually, but class-validator handles it if configured
+    @IsPhoneNumber()
     phone?: string;
 
-    @ApiPropertyOptional({ description: 'Preferred language code' })
+    @ApiPropertyOptional({ description: 'Preferred language code (fr, en, ht)' })
     @IsOptional()
     @IsString()
     preferred_lang?: string;

@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StationEntity } from '../../modules/organization/entities/station.entity';
 import { REQUIRE_GEOFENCE_KEY } from '../decorators/require-geofence.decorator';
+import { haversineDistanceMeters } from '../utils/haversine.util';
 
 @Injectable()
 export class GeofenceGuard implements CanActivate {
@@ -34,13 +35,13 @@ export class GeofenceGuard implements CanActivate {
         const request = context.switchToHttp().getRequest();
         const body = request.body;
 
-        // Extract GPS coordinates from request
+        // Extract GPS coordinates from request body or headers (fallback for some clients)
         const gpsLat = body?.gps_lat ?? request.headers['x-gps-lat'];
         const gpsLng = body?.gps_lng ?? request.headers['x-gps-lng'];
         const stationId = body?.station_id;
 
         if (!gpsLat || !gpsLng) {
-            // GPS unavailable — allow but flag
+            // GPS unavailable — allow but flag for audit/monitoring
             this.logger.warn('Geofence check skipped: GPS coordinates not provided');
             request.geofenceResult = {
                 is_within: null,
@@ -61,12 +62,11 @@ export class GeofenceGuard implements CanActivate {
             throw new ForbiddenException('Station not found');
         }
 
-        // Calculate distance using Haversine formula
-        const distance = this.calculateDistance(
+        const distance = haversineDistanceMeters(
             parseFloat(gpsLat as string),
             parseFloat(gpsLng as string),
-            parseFloat(station.gps_lat as any),
-            parseFloat(station.gps_lng as any),
+            station.gps_lat,
+            station.gps_lng,
         );
 
         const isWithinGeofence = distance <= station.geofence_radius_m;
@@ -81,7 +81,7 @@ export class GeofenceGuard implements CanActivate {
 
         if (!isWithinGeofence) {
             this.logger.warn(
-                `Geofence violation: truck at (${gpsLat}, ${gpsLng}) is ${Math.round(distance)}m from ${station.name} (radius: ${station.geofence_radius_m}m)`,
+                `Geofence violation: position (${gpsLat}, ${gpsLng}) is ${Math.round(distance)}m from ${station.name} (radius: ${station.geofence_radius_m}m)`,
             );
             throw new ForbiddenException(
                 `Action blocked: You are ${Math.round(distance)}m from ${station.name}. ` +
@@ -90,31 +90,5 @@ export class GeofenceGuard implements CanActivate {
         }
 
         return true;
-    }
-
-    /**
-     * Haversine formula — distance between two GPS coordinates in meters
-     */
-    private calculateDistance(
-        lat1: number,
-        lng1: number,
-        lat2: number,
-        lng2: number,
-    ): number {
-        const R = 6371000; // Earth radius in meters
-        const dLat = this.toRadians(lat2 - lat1);
-        const dLng = this.toRadians(lng2 - lng1);
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(this.toRadians(lat1)) *
-            Math.cos(this.toRadians(lat2)) *
-            Math.sin(dLng / 2) *
-            Math.sin(dLng / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
-    }
-
-    private toRadians(degrees: number): number {
-        return degrees * (Math.PI / 180);
     }
 }

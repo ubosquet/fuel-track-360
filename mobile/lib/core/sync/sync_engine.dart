@@ -142,9 +142,9 @@ class SyncEngine {
         };
       }).toList();
 
-      // Send to server
+      // Send to server — path is relative to dio's baseUrl (already includes /api/v1)
       final response = await dio.post(
-        '/api/v1/sync/batch',
+        '/sync/batch',
         data: {'operations': operations},
       );
 

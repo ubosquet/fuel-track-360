@@ -101,7 +101,11 @@ export class ManifestEntity {
     @Column({ type: 'boolean', default: false })
     offline_created: boolean;
 
-    @Column({ type: 'uuid', nullable: true })
+    /**
+     * Unique deduplication key for offline-created manifests.
+     * DB-level UNIQUE constraint prevents duplicate syncs under concurrency.
+     */
+    @Column({ type: 'uuid', nullable: true, unique: true })
     sync_id: string;
 
     @CreateDateColumn({ type: 'timestamptz' })

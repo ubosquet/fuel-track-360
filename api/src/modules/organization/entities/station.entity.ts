@@ -36,10 +36,11 @@ export class StationEntity {
     @Column({ type: 'text', nullable: true })
     address: string;
 
-    @Column({ type: 'decimal', precision: 10, scale: 7 })
+    // float8 returns a proper JS number (not a string like 'decimal' does in TypeORM/PG)
+    @Column({ type: 'float8' })
     gps_lat: number;
 
-    @Column({ type: 'decimal', precision: 10, scale: 7 })
+    @Column({ type: 'float8' })
     gps_lng: number;
 
     @Column({ type: 'integer', default: 500 })

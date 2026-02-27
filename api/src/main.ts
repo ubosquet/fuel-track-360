@@ -5,7 +5,6 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
-import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor';
 import helmet from 'helmet';
 
 async function bootstrap() {
@@ -14,8 +13,19 @@ async function bootstrap() {
 
   // ── Security Middleware ──
   app.use(helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow CORS for Swagger/Frontend
-    contentSecurityPolicy: false, // Disabled for now to ensure Swagger UI compatibility
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    // Minimal CSP that allows Swagger UI inline scripts/styles
+    // while keeping XSS protection active.
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],  // Swagger UI requires inline scripts
+        styleSrc: ["'self'", "'unsafe-inline'"],  // Swagger UI requires inline styles
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      },
+    },
   }));
 
   // ── Body size limit: prevent oversized sync payloads ──

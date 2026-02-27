@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditEventEntity } from './entities/audit-event.entity';
+import { normalizePagination } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class AuditService {
@@ -48,8 +49,11 @@ export class AuditService {
         page?: number;
         limit?: number;
     }): Promise<{ data: AuditEventEntity[]; total: number }> {
-        const page = params.page || 1;
-        const limit = params.limit || 50;
+        const { page: normPage, limit: normLimit } = normalizePagination(
+            params.page,
+            params.limit,
+            100,   // hard cap — audit rows can be large JSON payloads
+        );
 
         const query = this.auditRepository
             .createQueryBuilder('audit')
@@ -76,8 +80,8 @@ export class AuditService {
         }
 
         const [data, total] = await query
-            .skip((page - 1) * limit)
-            .take(limit)
+            .skip((normPage - 1) * normLimit)
+            .take(normLimit)
             .getManyAndCount();
 
         return { data, total };

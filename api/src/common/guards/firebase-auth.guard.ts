@@ -10,6 +10,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserEntity } from '../../modules/auth/entities/user.entity';
 
+/**
+ * Minimum interval between last_login_at DB writes.
+ * Prevents a DB UPDATE on every single authenticated request.
+ */
+const LOGIN_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
+
 @Injectable()
 export class FirebaseAuthGuard implements CanActivate {
     private readonly logger = new Logger(FirebaseAuthGuard.name);
@@ -55,8 +61,22 @@ export class FirebaseAuthGuard implements CanActivate {
                 preferred_lang: user.preferred_lang,
             };
 
-            // Update last login
-            await this.userRepository.update(user.id, { last_login_at: new Date() });
+            // ── Throttled last_login_at update ──────────────────────────────────
+            // Only write to the DB if we haven't recorded a login in the last
+            // LOGIN_THROTTLE_MS. This prevents a heavy UPDATE on every API call
+            // (a mobile driver can make dozens of requests per session).
+            const shouldUpdate =
+                !user.last_login_at ||
+                Date.now() - new Date(user.last_login_at).getTime() > LOGIN_THROTTLE_MS;
+
+            if (shouldUpdate) {
+                // Fire and forget — don't await so auth latency is unaffected
+                this.userRepository
+                    .update(user.id, { last_login_at: new Date() })
+                    .catch((err) =>
+                        this.logger.error(`Failed to update last_login_at for user ${user.id}: ${err.message}`),
+                    );
+            }
 
             return true;
         } catch (error) {

@@ -15,6 +15,7 @@ import {
     Logger,
     ParseUUIDPipe,
     BadRequestException,
+    HttpCode,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -30,6 +31,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequireGeofence } from '../../common/decorators/require-geofence.decorator';
 import { StorageService } from '../storage/storage.service';
+import type { AuthTokenPayload } from '../../../../packages/shared/src/types/user.types';
 
 const MAX_PHOTO_SIZE = 10 * 1024 * 1024; // 10 MB (already compressed on client ideally)
 
@@ -49,12 +51,13 @@ export class S2LController {
     @Roles('DRIVER', 'DISPATCHER', 'SUPERVISOR', 'ADMIN', 'OWNER')
     @UseGuards(GeofenceGuard)
     @RequireGeofence()
+    @HttpCode(201)
     @ApiOperation({ summary: 'Create a new S2L checklist' })
     async create(
         @Body() dto: CreateS2LDto,
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
-        return this.s2lService.create(dto, user.user_id, user.organization_id);
+        return this.s2lService.create(dto, user.user_id, user.organization_id, user.role);
     }
 
     @Post(':id/submit')
@@ -63,9 +66,9 @@ export class S2LController {
     async submit(
         @Param('id', ParseUUIDPipe) id: string,
         @Body() body: SubmitS2LDto,
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
-        return this.s2lService.submit(id, user.user_id, body.signature_url, body.gps_lat, body.gps_lng);
+        return this.s2lService.submit(id, user.organization_id, user.user_id, user.role, body.signature_url, body.gps_lat, body.gps_lng);
     }
 
     @Post(':id/review')
@@ -74,9 +77,9 @@ export class S2LController {
     async review(
         @Param('id', ParseUUIDPipe) id: string,
         @Body() body: ReviewS2LDto,
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
-        return this.s2lService.review(id, user.user_id, user.role, body.status, body.review_notes);
+        return this.s2lService.review(id, user.organization_id, user.user_id, user.role, body.status, body.review_notes);
     }
 
     // ════════════════════════════════════════════════════════════
@@ -119,7 +122,7 @@ export class S2LController {
         )
         file: Express.Multer.File,
         @Body() metadata: UploadPhotoDto,
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
         // 1. Upload to GCS
         const { storagePath, sizeBytes } = await this.storageService.uploadS2LPhoto(
@@ -131,7 +134,7 @@ export class S2LController {
         );
 
         // 2. Save photo record in database
-        const photo = await this.s2lService.addPhoto(id, {
+        const photo = await this.s2lService.addPhoto(id, user.organization_id, {
             photo_type: metadata.photo_type,
             storage_path: storagePath,
             file_size_bytes: sizeBytes,
@@ -154,8 +157,9 @@ export class S2LController {
     async addPhoto(
         @Param('id', ParseUUIDPipe) id: string,
         @Body() body: AddPhotoDto,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
-        return this.s2lService.addPhoto(id, {
+        return this.s2lService.addPhoto(id, user.organization_id, {
             ...body,
             captured_at: new Date(body.captured_at),
         });
@@ -178,7 +182,7 @@ export class S2LController {
             }),
         )
         file: Express.Multer.File,
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
         const { storagePath } = await this.storageService.uploadSignature(
             user.organization_id,
@@ -192,13 +196,24 @@ export class S2LController {
         return { storage_path: storagePath };
     }
 
+    @Get('stats')
+    @ApiOperation({
+        summary: 'Get pre-aggregated S2L status counts for the dashboard',
+        description:
+            'Returns a single-query aggregated count of S2L checklists by status. ' +
+            'Use this instead of fetching full lists and counting client-side.',
+    })
+    async getStats(@CurrentUser() user: AuthTokenPayload) {
+        return this.s2lService.getStats(user.organization_id);
+    }
+
     @Get()
     @ApiOperation({ summary: 'List S2L checklists for the organization' })
     @ApiQuery({ name: 'status', required: false })
     @ApiQuery({ name: 'page', required: false })
     @ApiQuery({ name: 'limit', required: false })
     async findAll(
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
         @Query('status') status?: string,
         @Query('page') page?: number,
         @Query('limit') limit?: number,
@@ -209,19 +224,25 @@ export class S2LController {
     @Get('my')
     @Roles('DRIVER', 'DISPATCHER')
     @ApiOperation({ summary: 'List S2L checklists for the current driver' })
-    async findByDriver(@CurrentUser() user: any) {
-        return this.s2lService.findByDriver(user.user_id);
+    async findByDriver(@CurrentUser() user: AuthTokenPayload) {
+        return this.s2lService.findByDriver(user.user_id, user.organization_id);
     }
 
     @Get(':id')
     @ApiOperation({ summary: 'Get S2L checklist details' })
-    async findOne(@Param('id', ParseUUIDPipe) id: string) {
-        return this.s2lService.findOneOrFail(id);
+    async findOne(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentUser() user: AuthTokenPayload,
+    ) {
+        return this.s2lService.findOneOrFail(id, user.organization_id);
     }
 
     @Get(':id/photos')
     @ApiOperation({ summary: 'Get photos for an S2L checklist' })
-    async getPhotos(@Param('id', ParseUUIDPipe) id: string) {
-        return this.s2lService.getPhotos(id);
+    async getPhotos(
+        @Param('id', ParseUUIDPipe) id: string,
+        @CurrentUser() user: AuthTokenPayload,
+    ) {
+        return this.s2lService.getPhotos(id, user.organization_id);
     }
 }

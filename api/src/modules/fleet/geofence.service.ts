@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GeofenceEntity } from './entities/geofence.entity';
 import { StationEntity } from '../organization/entities/station.entity';
+import { haversineDistanceMeters } from '../../common/utils/haversine.util';
 
 export interface GeofenceCheckResult {
     is_within: boolean;
@@ -24,7 +25,7 @@ export class GeofenceService {
     ) { }
 
     /**
-     * Check if coordinates are within any geofence for a station
+     * Check if coordinates are within the geofence for a given station.
      */
     async checkGeofence(
         lat: number,
@@ -45,11 +46,11 @@ export class GeofenceService {
             };
         }
 
-        const distance = this.calculateHaversineDistance(
+        const distance = haversineDistanceMeters(
             lat,
             lng,
-            parseFloat(station.gps_lat as any),
-            parseFloat(station.gps_lng as any),
+            station.gps_lat,
+            station.gps_lng,
         );
 
         const isWithin = distance <= station.geofence_radius_m;
@@ -64,7 +65,7 @@ export class GeofenceService {
     }
 
     /**
-     * Find the nearest station to given coordinates
+     * Find the nearest station to given coordinates within an organization.
      */
     async findNearestStation(
         lat: number,
@@ -81,11 +82,11 @@ export class GeofenceService {
         let minDistance = Infinity;
 
         for (const station of stations) {
-            const distance = this.calculateHaversineDistance(
+            const distance = haversineDistanceMeters(
                 lat,
                 lng,
-                parseFloat(station.gps_lat as any),
-                parseFloat(station.gps_lng as any),
+                station.gps_lat,
+                station.gps_lng,
             );
             if (distance < minDistance) {
                 minDistance = distance;
@@ -96,9 +97,8 @@ export class GeofenceService {
         return { station: nearest, distance_m: Math.round(minDistance) };
     }
 
-    /**
-     * CRUD for geofences
-     */
+    // ── CRUD for geofences ──────────────────────────────
+
     async createGeofence(data: Partial<GeofenceEntity>): Promise<GeofenceEntity> {
         const geofence = this.geofenceRepository.create(data);
         return this.geofenceRepository.save(geofence);
@@ -113,31 +113,5 @@ export class GeofenceService {
     async updateGeofence(id: string, data: Partial<GeofenceEntity>): Promise<GeofenceEntity> {
         await this.geofenceRepository.update(id, data);
         return this.geofenceRepository.findOneOrFail({ where: { id } });
-    }
-
-    /**
-     * Haversine formula — distance in meters between two GPS points
-     */
-    private calculateHaversineDistance(
-        lat1: number,
-        lng1: number,
-        lat2: number,
-        lng2: number,
-    ): number {
-        const R = 6371000;
-        const dLat = this.toRadians(lat2 - lat1);
-        const dLng = this.toRadians(lng2 - lng1);
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(this.toRadians(lat1)) *
-            Math.cos(this.toRadians(lat2)) *
-            Math.sin(dLng / 2) *
-            Math.sin(dLng / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
-    }
-
-    private toRadians(degrees: number): number {
-        return degrees * (Math.PI / 180);
     }
 }

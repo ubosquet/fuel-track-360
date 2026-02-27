@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, ParseUUIDPipe, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { FirebaseAuthGuard } from '../../common/guards/firebase-auth.guard';
@@ -8,6 +8,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CreateStationDto } from './dto/create-station.dto';
 import { UpdateStationDto } from './dto/update-station.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import type { AuthTokenPayload } from '../../../../packages/shared/src/types/user.types';
 
 @ApiTags('organization')
 @ApiBearerAuth()
@@ -18,7 +19,7 @@ export class OrganizationController {
 
     @Get('current')
     @ApiOperation({ summary: 'Get current user organization' })
-    async getCurrent(@CurrentUser() user: any) {
+    async getCurrent(@CurrentUser() user: AuthTokenPayload) {
         return this.orgService.findById(user.organization_id);
     }
 
@@ -27,7 +28,7 @@ export class OrganizationController {
     @ApiOperation({ summary: 'Update organization settings' })
     async updateCurrent(
         @Body() body: UpdateOrganizationDto,
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
         return this.orgService.updateOrganization(user.organization_id, body);
     }
@@ -35,7 +36,7 @@ export class OrganizationController {
     @Get('stations')
     @ApiOperation({ summary: 'List stations for the organization' })
     async getStations(
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
         @Query('type') type?: string,
     ) {
         return this.orgService.getStations(user.organization_id, type);
@@ -45,22 +46,20 @@ export class OrganizationController {
     @ApiOperation({ summary: 'Get station details' })
     async getStation(
         @Param('id', ParseUUIDPipe) id: string,
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
         return this.orgService.getStationById(id, user.organization_id);
     }
 
     @Post('stations')
     @Roles('ADMIN', 'OWNER')
+    @HttpCode(201)
     @ApiOperation({ summary: 'Create a station' })
     async createStation(
         @Body() body: CreateStationDto,
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
-        return this.orgService.createStation({
-            ...body,
-            organization_id: user.organization_id,
-        });
+        return this.orgService.createStation(body, user.organization_id);
     }
 
     @Put('stations/:id')
@@ -69,9 +68,8 @@ export class OrganizationController {
     async updateStation(
         @Param('id', ParseUUIDPipe) id: string,
         @Body() body: UpdateStationDto,
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
         return this.orgService.updateStation(id, user.organization_id, body);
     }
 }
-

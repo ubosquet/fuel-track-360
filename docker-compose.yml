@@ -38,6 +38,7 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: development
+      APP_ENV: development        # Used by database.module.ts for synchronize check
       APP_PORT: 3000
       DATABASE_HOST: postgres
       DATABASE_PORT: 5432

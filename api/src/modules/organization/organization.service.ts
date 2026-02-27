@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrganizationEntity } from './entities/organization.entity';
 import { StationEntity } from './entities/station.entity';
+import { CreateStationDto } from './dto/create-station.dto';
+import { UpdateStationDto } from './dto/update-station.dto';
 
 @Injectable()
 export class OrganizationService {
@@ -55,15 +57,22 @@ export class OrganizationService {
         return station;
     }
 
-    async createStation(data: Partial<StationEntity>): Promise<StationEntity> {
-        const station = this.stationRepository.create(data);
-        return this.stationRepository.save(station);
+    /**
+     * N15 FIX: use typed CreateStationDto instead of Partial<StationEntity>.
+     * organizationId is always injected server-side (from the caller's JWT) —
+     * not from the DTO — to prevent cross-org station creation.
+     */
+    async createStation(data: CreateStationDto, organizationId: string): Promise<StationEntity> {
+        const station = this.stationRepository.create({ ...data, organization_id: organizationId });
+        const saved = await this.stationRepository.save(station);
+        this.logger.log(`Station created: ${saved.id} (${saved.name}) for org ${organizationId}`);
+        return saved;
     }
 
     async updateStation(
         id: string,
         organizationId: string,
-        updates: Partial<StationEntity>,
+        updates: UpdateStationDto,
     ): Promise<StationEntity> {
         const station = await this.getStationById(id, organizationId);
         Object.assign(station, updates);

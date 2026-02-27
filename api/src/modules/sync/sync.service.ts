@@ -32,7 +32,8 @@ export class SyncService {
     ) { }
 
     /**
-     * Process a batch of offline sync operations
+     * Process a batch of offline sync operations.
+     *
      * Protocol:
      * 1. Each operation has a sync_id for deduplication
      * 2. Server returns status for each operation
@@ -41,13 +42,14 @@ export class SyncService {
     async processBatch(
         operations: SyncOperation[],
         userId: string,
+        userRole: string,        // M5 FIX: actual role from JWT
         organizationId: string,
     ): Promise<SyncResult[]> {
         const results: SyncResult[] = [];
 
         for (const op of operations) {
             try {
-                const result = await this.processOperation(op, userId, organizationId);
+                const result = await this.processOperation(op, userId, userRole, organizationId);
                 results.push(result);
             } catch (error) {
                 this.logger.error(`Sync operation failed: ${op.sync_id} - ${error.message}`);
@@ -59,14 +61,14 @@ export class SyncService {
             }
         }
 
-        // Log batch receipt to audit
+        // M5 FIX: use actual role for audit log
         await this.auditService.log({
             organization_id: organizationId,
             entity_type: 'sync' as any,
             entity_id: 'batch',
             event_type: 'SYNC_BATCH_RECEIVED',
             actor_id: userId,
-            actor_role: 'DRIVER',
+            actor_role: userRole,   // was hardcoded 'DRIVER'
             payload: {
                 total_operations: operations.length,
                 completed: results.filter((r) => r.status === 'COMPLETED').length,
@@ -81,15 +83,16 @@ export class SyncService {
     private async processOperation(
         op: SyncOperation,
         userId: string,
+        userRole: string,
         organizationId: string,
     ): Promise<SyncResult> {
         switch (op.entity_type) {
             case 's2l':
-                return this.processS2LOperation(op, userId, organizationId);
+                return this.processS2LOperation(op, userId, userRole, organizationId);
             case 'gps_log':
-                return this.processGpsOperation(op);
+                return this.processGpsOperation(op, organizationId);
             case 'manifest':
-                return this.processManifestOperation(op, userId, organizationId);
+                return this.processManifestOperation(op, userId, userRole, organizationId);
             default:
                 return {
                     sync_id: op.sync_id,
@@ -102,6 +105,7 @@ export class SyncService {
     private async processS2LOperation(
         op: SyncOperation,
         userId: string,
+        userRole: string,           // M5 FIX
         organizationId: string,
     ): Promise<SyncResult> {
         if (op.operation === 'CREATE') {
@@ -109,6 +113,7 @@ export class SyncService {
                 { ...op.payload, sync_id: op.sync_id, offline_created: true },
                 userId,
                 organizationId,
+                userRole,           // M5 FIX: pass actual role so audit log is correct
             );
             return {
                 sync_id: op.sync_id,
@@ -119,11 +124,15 @@ export class SyncService {
         return { sync_id: op.sync_id, status: 'FAILED', error: 'Unsupported operation' };
     }
 
-    private async processGpsOperation(op: SyncOperation): Promise<SyncResult> {
+    private async processGpsOperation(
+        op: SyncOperation,
+        organizationId: string,
+    ): Promise<SyncResult> {
         if (op.operation === 'CREATE') {
             // GPS logs are append-only — client always wins
             const logs = Array.isArray(op.payload) ? op.payload : [op.payload];
-            await this.fleetService.ingestGpsLogs(logs);
+            // M2 FIX (carried from fleet): pass organizationId for truck ownership validation
+            await this.fleetService.ingestGpsLogs(logs, organizationId);
             return {
                 sync_id: op.sync_id,
                 status: 'COMPLETED',
@@ -135,6 +144,7 @@ export class SyncService {
     private async processManifestOperation(
         op: SyncOperation,
         userId: string,
+        userRole: string,           // M5 FIX
         organizationId: string,
     ): Promise<SyncResult> {
         if (op.operation === 'CREATE') {
@@ -142,6 +152,7 @@ export class SyncService {
                 { ...op.payload, sync_id: op.sync_id, offline_created: true },
                 userId,
                 organizationId,
+                userRole,           // M5 FIX: pass actual role
             );
             return {
                 sync_id: op.sync_id,

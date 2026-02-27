@@ -106,20 +106,47 @@ export function useRejectS2L() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// Dashboard Stats Hook
+// Dashboard Stats Hook — uses dedicated aggregate endpoint
 // ═══════════════════════════════════════════════════════════
 
+/** Fetch pre-aggregated S2L status counts — much lighter than fetching full records */
+export function useS2LStats() {
+    return useQuery({
+        queryKey: [...s2lKeys.all, 'stats'] as const,
+        queryFn: async (): Promise<{
+            total: number;
+            draft: number;
+            submitted: number;
+            approved: number;
+            rejected: number;
+            expired: number;
+        }> => {
+            const res: any = await api.get('/s2l/stats');
+            return res?.data ?? res;
+        },
+        staleTime: 30_000,
+        refetchInterval: 60_000,
+    });
+}
+
 export function useDashboardStats() {
-    const { data: s2ls, isLoading, error } = useS2LList({ limit: 100 });
+    const { data: countsRaw, isLoading: statsLoading, error: statsError } = useS2LStats();
+    const { data: s2ls, isLoading: listLoading, error: listError } = useS2LList({ limit: 5 });
+
+    const counts = countsRaw ?? { total: 0, draft: 0, submitted: 0, approved: 0, rejected: 0, expired: 0 };
 
     const stats = {
-        activeS2L: s2ls?.filter((s) => s.status === 'DRAFT' || s.status === 'SUBMITTED').length ?? 0,
-        submitted: s2ls?.filter((s) => s.status === 'SUBMITTED').length ?? 0,
-        approved: s2ls?.filter((s) => s.status === 'APPROVED').length ?? 0,
-        rejected: s2ls?.filter((s) => s.status === 'REJECTED').length ?? 0,
-        total: s2ls?.length ?? 0,
-        recentS2Ls: s2ls?.slice(0, 5) ?? [],
+        activeS2L: counts.draft + counts.submitted,
+        submitted: counts.submitted,
+        approved: counts.approved,
+        rejected: counts.rejected,
+        total: counts.total,
+        recentS2Ls: s2ls ?? [],
     };
 
-    return { stats, isLoading, error };
+    return {
+        stats,
+        isLoading: statsLoading || listLoading,
+        error: statsError || listError,
+    };
 }

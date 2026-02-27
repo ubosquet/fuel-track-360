@@ -92,7 +92,11 @@ export class S2LChecklistEntity {
     @Column({ type: 'boolean', default: false })
     offline_created: boolean;
 
-    @Column({ type: 'uuid', nullable: true })
+    /**
+     * Unique deduplication key for offline-created S2Ls.
+     * DB-level UNIQUE constraint prevents duplicate syncs even under concurrent requests.
+     */
+    @Column({ type: 'uuid', nullable: true, unique: true })
     sync_id: string;
 
     @OneToMany(() => S2LPhotoEntity, (photo) => photo.s2l)

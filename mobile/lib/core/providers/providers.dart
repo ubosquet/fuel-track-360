@@ -15,9 +15,18 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 });
 
 // ── Networking ──
+// Override at build time:
+//   Android emulator:  flutter run --dart-define=API_URL=http://10.0.2.2:3000/api/v1
+//   iOS simulator:     flutter run --dart-define=API_URL=http://127.0.0.1:3000/api/v1
+//   Physical device:   flutter run --dart-define=API_URL=http://192.168.x.x:3000/api/v1
+const String _apiBaseUrl = String.fromEnvironment(
+  'API_URL',
+  defaultValue: 'http://10.0.2.2:3000/api/v1', // Android emulator default
+);
+
 final dioProvider = Provider<Dio>((ref) {
   return Dio(BaseOptions(
-    baseUrl: 'http://10.0.2.2:3000/api/v1', // Android emulator → host
+    baseUrl: _apiBaseUrl,
     connectTimeout: const Duration(seconds: 30),
     receiveTimeout: const Duration(seconds: 30),
   ));

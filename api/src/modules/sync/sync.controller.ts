@@ -5,6 +5,7 @@ import { SyncService } from './sync.service';
 import { SyncBatchDto, SyncOperationDto } from './dto/sync-batch.dto';
 import { FirebaseAuthGuard } from '../../common/guards/firebase-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthTokenPayload } from '../../../../packages/shared/src/types/user.types';
 
 @ApiTags('sync')
 @ApiBearerAuth()
@@ -41,7 +42,7 @@ export class SyncController {
     }))
     async processBatch(
         @Body() body: SyncBatchDto,
-        @CurrentUser() user: any,
+        @CurrentUser() user: AuthTokenPayload,
     ) {
         this.logger.log(
             `Sync batch received: ${body.operations.length} operations from user ${user.user_id}`,
@@ -57,6 +58,6 @@ export class SyncController {
             queued_at: op.queued_at,
         }));
 
-        return this.syncService.processBatch(operations, user.user_id, user.organization_id);
+        return this.syncService.processBatch(operations, user.user_id, user.role, user.organization_id);
     }
 }

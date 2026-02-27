@@ -13,6 +13,7 @@ import { AuditModule } from '../audit/audit.module';
         AuditModule,
     ],
     controllers: [ManifestController],
+    // DataSource is provided globally by TypeOrmModule.forRootAsync — no extra import needed
     providers: [ManifestService],
     exports: [ManifestService],
 })
