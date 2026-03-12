@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { FleetController } from './fleet.controller';
 import { FleetService } from './fleet.service';
 import { GeofenceService } from './geofence.service';
+import { GpsGateway } from './gps.gateway';
 import { TruckEntity } from './entities/truck.entity';
 import { GpsLogEntity } from './entities/gps-log.entity';
 import { GeofenceEntity } from './entities/geofence.entity';
@@ -15,7 +16,7 @@ import { AuditModule } from '../audit/audit.module';
         AuditModule,
     ],
     controllers: [FleetController],
-    providers: [FleetService, GeofenceService],
+    providers: [FleetService, GeofenceService, GpsGateway],
     exports: [FleetService, GeofenceService],
 })
 export class FleetModule { }

@@ -55,6 +55,8 @@ export interface AuthTokenPayload {
     role: UserRole;
     organization_id: string;
     user_id: string;
+    full_name: string;
+    preferred_lang: PreferredLanguage;
 }
 
 /** Roles that require MFA */

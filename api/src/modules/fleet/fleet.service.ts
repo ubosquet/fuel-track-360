@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger, forwardRef, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TruckEntity } from './entities/truck.entity';
 import { GpsLogEntity } from './entities/gps-log.entity';
 import { AuditService } from '../audit/audit.service';
+import { GpsGateway } from './gps.gateway';
 
 @Injectable()
 export class FleetService {
@@ -15,6 +16,8 @@ export class FleetService {
         @InjectRepository(GpsLogEntity)
         private readonly gpsLogRepository: Repository<GpsLogEntity>,
         private readonly auditService: AuditService,
+        @Inject(forwardRef(() => GpsGateway))
+        private readonly gpsGateway: GpsGateway,
     ) { }
 
     async findAllTrucks(organizationId: string): Promise<TruckEntity[]> {
@@ -34,14 +37,12 @@ export class FleetService {
 
     /**
      * Find a truck by ID and verify it belongs to the given organization.
-     * Throws ForbiddenException if the truck exists but belongs to a different org.
      */
     async findTruckByIdInOrg(id: string, organizationId: string): Promise<TruckEntity> {
         const truck = await this.truckRepository.findOne({
             where: { id, organization_id: organizationId },
         });
         if (!truck) {
-            // Check if truck exists at all — if yes, it's a cross-org access attempt
             const exists = await this.truckRepository.findOne({ where: { id } });
             if (exists) {
                 throw new ForbiddenException('Access to this truck is not allowed');
@@ -84,12 +85,6 @@ export class FleetService {
         });
     }
 
-    /**
-     * N14 FIX: Soft-deactivate a truck (sets is_active = false).
-     * Hard deletion is never performed — truck records must be retained for
-     * audit trail and historical GPS/S2L/manifest reference integrity.
-     * Restricted to ADMIN/OWNER in the controller.
-     */
     async deactivateTruck(
         id: string,
         actorId: string,
@@ -99,7 +94,7 @@ export class FleetService {
         const truck = await this.findTruckByIdInOrg(id, organizationId);
 
         if (!truck.is_active) {
-            return truck; // Already deactivated — idempotent
+            return truck; // Already deactivated
         }
 
         await this.truckRepository.update(id, { is_active: false });
@@ -118,9 +113,6 @@ export class FleetService {
         return { ...truck, is_active: false };
     }
 
-    /**
-     * Re-activate a previously deactivated truck.
-     */
     async reactivateTruck(
         id: string,
         actorId: string,
@@ -133,7 +125,7 @@ export class FleetService {
         if (!truck) throw new NotFoundException(`Truck ${id} not found`);
 
         if (truck.is_active) {
-            return truck; // Already active — idempotent
+            return truck; // Already active
         }
 
         await this.truckRepository.update(id, { is_active: true });
@@ -154,13 +146,6 @@ export class FleetService {
 
     /**
      * Ingest GPS logs from the mobile app (batch or single).
-     * Each log is validated against the caller's organization to prevent
-     * cross-org GPS spoofing. Logs for trucks not belonging to the caller's
-     * org are silently dropped and a warning is emitted.
-     *
-     * NOTE: GPS in FT360 is sourced from the driver's phone (Flutter app).
-     * The app sends periodic location updates tied to the truck the driver
-     * is currently assigned to.
      */
     async ingestGpsLogs(
         logs: {
@@ -175,7 +160,6 @@ export class FleetService {
         }[],
         organizationId: string,
     ): Promise<{ ingested: number; rejected: number }> {
-        // Filter out any trucks that don't belong to this organization
         const truckIds = [...new Set(logs.map((l) => l.truck_id))];
         const ownedTrucks = await this.truckRepository.find({
             where: truckIds.map((id) => ({ id, organization_id: organizationId })),
@@ -222,9 +206,17 @@ export class FleetService {
         }
 
         await Promise.all(
-            [...latestByTruck.values()].map((log) =>
-                this.updateTruckGps(log.truck_id, log.lat, log.lng),
-            ),
+            [...latestByTruck.values()].map(async (log) => {
+                await this.updateTruckGps(log.truck_id, log.lat, log.lng);
+                // Broadcast update via WebSocket
+                this.gpsGateway.broadcastPosition(
+                    organizationId,
+                    log.truck_id,
+                    log.lat,
+                    log.lng,
+                    'PHONE'
+                );
+            }),
         );
 
         this.logger.debug(
@@ -234,8 +226,55 @@ export class FleetService {
     }
 
     /**
-     * Get GPS log history for a truck (organization scoped).
+     * Ingest GPS logs from hardware devices (e.g. Queclink).
+     * These updates are often faster and require IMEI to Truck resolution.
      */
+    async ingestDeviceGps(data: {
+        imei: string;
+        lat: number;
+        lng: number;
+        speed_kmh?: number;
+        heading?: number;
+        recorded_at: string;
+    }): Promise<void> {
+        // Find truck by associated hardware ID 
+        // Devices are not tied to a specific Organization ID session, they just broadcast
+        const truck = await this.truckRepository.findOne({
+            where: { gps_device_id: data.imei, is_active: true }
+        });
+        
+        if (!truck) {
+            this.logger.warn(`Received GPS data for unknown or inactive device IMEI: ${data.imei}`);
+            return;
+        }
+
+        const logEntity = this.gpsLogRepository.create({
+            truck_id: truck.id,
+            lat: data.lat,
+            lng: data.lng,
+            speed_kmh: data.speed_kmh,
+            heading: data.heading,
+            recorded_at: new Date(data.recorded_at),
+            synced_at: new Date(),
+        });
+
+        await this.gpsLogRepository.save(logEntity);
+        
+        // Update current position of truck
+        await this.updateTruckGps(truck.id, data.lat, data.lng);
+
+        // Broadcast to org
+        this.gpsGateway.broadcastPosition(
+            truck.organization_id,
+            truck.id,
+            data.lat,
+            data.lng,
+            'DEVICE'
+        );
+        
+        this.logger.debug(`Ingested DEVICE GPS for truck ${truck.plate_number}`);
+    }
+
     async getGpsHistory(
         truckId: string,
         organizationId: string,
@@ -243,10 +282,8 @@ export class FleetService {
         endDate?: string,
         limit = 500,
     ): Promise<GpsLogEntity[]> {
-        // Verify truck ownership first
         await this.findTruckByIdInOrg(truckId, organizationId);
-
-        const cappedLimit = Math.min(limit, 1000); // hard cap
+        const cappedLimit = Math.min(limit, 1000);
 
         const query = this.gpsLogRepository
             .createQueryBuilder('gps')
@@ -264,9 +301,6 @@ export class FleetService {
         return query.getMany();
     }
 
-    /**
-     * Get fleet status overview (organization scoped).
-     */
     async getFleetStatus(organizationId: string) {
         const trucks = await this.findAllTrucks(organizationId);
 

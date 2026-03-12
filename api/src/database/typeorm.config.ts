@@ -1,11 +1,11 @@
 import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
+import { join } from 'path';
 
 dotenv.config();
 
 /**
  * TypeORM CLI datasource config — used by `typeorm migration:*` commands.
- * This is separate from the NestJS runtime database module.
  */
 export default new DataSource({
     type: 'postgres',
@@ -18,8 +18,8 @@ export default new DataSource({
         process.env.DATABASE_SSL === 'true'
             ? { rejectUnauthorized: false }
             : false,
-    entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-    migrations: [__dirname + '/migrations/*{.ts,.js}'],
+    entities: [join(__dirname, '..', '**', '*.entity{.ts,.js}')],
+    migrations: [join(__dirname, '..', 'migrations', '*{.ts,.js}')],
     synchronize: false,
     logging: true,
 });

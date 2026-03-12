@@ -22,8 +22,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { IngestGpsLogsDto } from './dto/ingest-gps.dto';
 import { UpdateTruckStatusDto } from './dto/update-truck-status.dto';
 import type { AuthTokenPayload } from '../../../../packages/shared/src/types/user.types';
+import { ApiKeyGuard } from '../../common/guards/api-key.guard';
+import { DeviceGpsIngestDto } from './dto/device-ingest.dto';
 
-@ApiTags('fleet')
+@ApiTags('Fleet')
 @ApiBearerAuth()
 @Controller('fleet')
 @UseGuards(FirebaseAuthGuard, RolesGuard)

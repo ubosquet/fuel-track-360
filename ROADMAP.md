@@ -282,6 +282,116 @@ It digitizes the manual paper trail for bulk fuel delivery from terminals to sta
 
 ---
 
+## 🔵 Phase 4 — AI & Machine Learning Features (Future)
+
+> **Context:** Leverage AI to target the biggest pain points in high-risk environments like Haiti: fraud reduction, safety, and dispatcher efficiency.
+
+### 1. Fuel Theft Prediction (Advanced Variance Analysis)
+> **What:** Replace the static 2% variance rule with a predictive, dynamic fuel budget model.
+> **How:** Train an AI model on historical route topography, traffic patterns, delivery time, and the specific truck's historical fuel economy. If the volume discharged falls outside the AI's predicted margin of error, flag it instantly for high-probability theft.
+
+### 2. Smart OCR for Receipt Verification
+> **What:** Eliminate manual data-entry fraud ("fat finger" errors) when drivers input loaded/discharged volumes.
+> **How:** Integrate an AI Vision/OCR module in the mobile app or API. When a driver uploads a photo of the loading ticket or station receipt, the AI reads the printed volume, cross-checks it against the driver's input, and flags any mismatch before the supervisor approves.
+
+### 3. Danger Zone Avoidance & Dynamic Routing
+> **What:** Unpredictable security conditions on the road require real-time re-routing and alerts.
+> **How:** Train an anomaly detection model on the fleet's historical GPS telemetry to learn normal traffic flows. If a truck enters an area with historically high incident rates or suddenly deviates from a known safe route into a "danger zone", trigger a `CRITICAL` alert to the dispatcher.
+
+### 4. Driver Fatigue & Behavior Scoring
+> **What:** Reduce accident liability for highly flammable cargo.
+> **How:** Correlate hardware GPS telemetry (harsh braking, rapid acceleration, speeding) with continuous hours driven. Calculate a real-time **Fatigue and Risk Score**. Automatically notify dispatchers to mandate a break if a driver exceeds safety thresholds.
+
+### 5. Automated "Ghost Station" Detection
+> **What:** Detect illegal, off-the-books fuel drops or falsified S2L locations without manually geofencing every possible point.
+> **How:** Use clustering algorithms on historical GPS stop data to learn where trucks *actually* deliver fuel. Detect if a truck stops for 30+ minutes at an "unmapped" location, or suggest refining existing station geofence radiuses based on real-world drop points.
+
+### 6. Creole Voice-to-Text Dispatching
+> **What:** Drivers shouldn't be typing status updates while driving; literacy and typing speed vary.
+> **How:** Add an audio-note feature to the Flutter app. Use an AI audio model fine-tuned for Haitian Creole to transcribe the note, categorize the issue (Traffic, Security, Mechanical), and log it as structured text on the dashboard.
+
+---
+
+## 🔵 Phase 5 — Role-Based Enterprise AI (ERP Layer)
+
+> **Context:** Elevating FT360 from a logistics tracker into an intelligent Enterprise Resource Planning (ERP) platform by delivering specialized AI insights to every role in the business.
+
+### 💼 Business Owners & Leaders
+**1. Executive "Co-Pilot" (Conversational Analytics)**
+- **What:** Chat with the data instead of building complex dashboards. "Why did delivery margins drop in the North last week?"
+- **How:** RAG (Retrieval-Augmented Generation) connected to the Analytics metrics. The AI explains that 40% more idle time and a 1.5% variance increase caused the margin drop.
+**2. Strategic Demand & Supply Forecasting**
+- **What:** Anticipating market needs to buy fuel at the right price.
+- **How:** Predictive model analyzing consumption, weather, and scraped local news (roadblocks, strikes) to advise preemptive stockups at specific stations.
+
+### 💰 Finance & Payroll
+**1. Automated Performance-Based Payroll**
+- **What:** Dynamic salaries based on safety and speed instead of a flat rate.
+- **How:** Calculate exactly how much time was spent driving vs. idling. Merge this with the Driver Risk Score (Phase 4) and Zero-Variance deliveries to calculate the period's performance bonus automatically.
+**2. Per-Trip Profitability Engine (Margin Optimization)**
+- **What:** Granular, real-time ROI for every single delivery.
+- **How:** Calculate exact driver wages + fuel burned by the truck + maintenance wear vs. the delivery revenue, showing the Finance team exactly which routes bleed cash.
+
+### 📦 Procurement & Maintenance (Terminal Ops)
+**1. Smart Inventory Replenishment**
+- **What:** AI creates purchase orders before an underground tank goes dry.
+- **How:** Monitor the daily "burn rate" of fuel at every station. Auto-draft terminal purchase orders to optimize bulk-buy discounts while minimizing dead inventory cash flow.
+**2. Predictive Fleet Maintenance**
+- **What:** Fixing trucks before they break down on a dangerous route.
+- **How:** Deep analysis of hardware GPS (mileage, harsh braking, heavy loads) to predict when a truck specifically needs brakes, tires, or an engine check, alerting mechanics instantly.
+
+### 🎧 Dispatchers
+**1. Intelligent Auto-Routing & Dispatching**
+- **What:** Remove the guesswork of manual truck assignment.
+- **How:** When a station needs fuel, the AI recommends the optimal Truck-Driver pair based on proximity, tank capacity, driver's remaining safety hours, and route familiarity.
+**2. Real-Time Incident Triage Assistant**
+- **What:** Assisting dispatchers instantly during road crises.
+- **How:** If a roadblock is reported, the AI flashes a detour recommendation and offers a one-click button to text the new route to the driver and alert the receiving station of the new ETA.
+
+### ⛽ Station Owners (Customers / Franchisees)
+**1. Automated "Dry-Out" Alerts**
+- **What:** Preventing lost revenue from empty pumps.
+- **How:** Predictive model sends a WhatsApp/SMS alert: *"Based on sales, you will run out of Diesel at 4:00 PM tomorrow. Reply 'YES' to automatically request a 10,000L refill."*
+**2. Live ETA & Discrepancy Prevention**
+- **What:** Total transparency and trust.
+- **How:** Highly accurate ETAs via traffic modeling. If the Smart OCR (Phase 4) detects the truck was loaded with 9,900L instead of 10,000L, it texts the station owner the *actual* amount *before* the truck arrives, preventing arguments at discharge.
+
+---
+
+## 🔵 Phase 6 — Day 2 Operations (Next Update Priorities)
+
+> **Context:** Features essential for scale, managing external stakeholders, and handling edge cases in the field.
+
+### 1. Subcontractor / "Owner-Operator" Portals (For Dispatch & Owners)
+- **What:** A restricted access level for rented/subcontracted trucks.
+- **How:** An independent driver downloads the app but only sees their specific S2L and Manifest. They cannot see the organizational dashboard, analytics, or other trucks. This digitizes non-company trucks without leaking organizational data.
+
+### 2. A "Read-Only" Customer Portal / Tracking Link (For Station Owners)
+- **What:** Live tracking links for customers, similar to Uber or Amazon.
+- **How:** When a manifest is dispatched, the system automatically texts a self-destructing web link to the Station Owner. They click the link to see a live map of their specific truck and ETA without needing to log in, drastically reducing support calls to dispatch.
+
+### 3. Shift Handoffs & Multi-Driver Manifests
+- **What:** Allowing a manifest to transfer custody mid-trip (e.g., driver change on long routes or truck breakdown).
+- **How:** Driver A generates a "Transfer" QR code on their phone. Driver B scans it, and the API instantly transfers the custody of the fuel and the GPS tracking responsibility to Driver B.
+
+---
+
+## 🔵 Product Backlog (Future Considerations)
+
+### 1. The "Petty Cash" & Expense Tracker
+- **What:** Digitizing driver expenses (tolls, parking, emergency repairs).
+- **How:** A module in the mobile app where drivers snap a photo of a receipt or log cash expenses tied directly to the Manifest ID, simplifying accounting reconciliation.
+
+### 2. Offline Maps & Turn-by-Turn Navigation
+- **What:** Assisting drivers in off-grid delivery locations.
+- **How:** Pre-caching vector maps (like Mapbox or OpenStreetMap) for delivery regions directly onto the device to provide offline turn-by-turn navigation.
+
+### 3. Document Expiry Management
+- **What:** Preventing revenue loss due to expired documents blocking terminal access.
+- **How:** Upload and track expiry dates for driver's licenses, truck insurance, and terminal badges. The dashboard flashes indicators 30 days before expiry to alert Compliance/HR.
+
+---
+
 ## Architecture Notes (for context when resuming)
 
 ### GPS Dual-Source Priority Rule

@@ -34,19 +34,11 @@ export class TruckEntity {
     driver_id: string;
 
     @Column({
-        type: 'varchar',
-        length: 20,
+        type: 'enum',
+        enum: ['EN_ROUTE', 'LOADING', 'DISCHARGING', 'IDLE', 'MAINTENANCE'],
         default: 'IDLE',
     })
-    status:
-        | 'IDLE'
-        | 'EN_ROUTE_TO_TERMINAL'
-        | 'AT_TERMINAL'
-        | 'LOADING'
-        | 'EN_ROUTE_TO_STATION'
-        | 'AT_STATION'
-        | 'DISCHARGING'
-        | 'MAINTENANCE';
+    status: string;
 
     @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
     current_lat: number;
@@ -54,15 +46,18 @@ export class TruckEntity {
     @Column({ type: 'decimal', precision: 10, scale: 7, nullable: true })
     current_lng: number;
 
-    @Column({ type: 'timestamptz', nullable: true })
+    @Column({ type: 'timestamp', nullable: true })
     last_gps_at: Date;
+    
+    @Column({ nullable: true })
+    gps_device_id: string; // Queclink IMEI or hardware tracker ID
 
     @Column({ type: 'boolean', default: true })
     is_active: boolean;
 
-    @CreateDateColumn({ type: 'timestamptz' })
+    @CreateDateColumn()
     created_at: Date;
 
-    @UpdateDateColumn({ type: 'timestamptz' })
+    @UpdateDateColumn()
     updated_at: Date;
 }

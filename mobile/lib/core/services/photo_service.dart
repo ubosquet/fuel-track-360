@@ -17,12 +17,12 @@ class PhotoService {
   static const _uuid = Uuid();
 
   /// Maximum dimension for the longest side of the image.
-  /// 1280px is sufficient for compliance review on a tablet/desktop.
-  static const int maxDimension = 1280;
+  /// 1024px is sufficient for compliance review while minimizing file size.
+  static const int maxDimension = 1024;
 
-  /// JPEG quality percentage. 70 gives excellent visual quality
-  /// at roughly 1/10th the raw file size.
-  static const int jpegQuality = 70;
+  /// JPEG quality percentage. 50 gives acceptable visual quality
+  /// at roughly 1/20th the raw file size for 2G/3G networks.
+  static const int jpegQuality = 50;
 
   /// Capture a photo from the device camera with automatic compression
   ///

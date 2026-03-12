@@ -13,6 +13,12 @@ import { SyncModule } from './modules/sync/sync.module';
 import { DatabaseModule } from './database/database.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { HealthModule } from './modules/health/health.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { SupportModule } from './modules/support/support.module';
+import { AIModule } from './modules/ai/ai.module';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
+import { TutorialModule } from './modules/tutorial/tutorial.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -21,6 +27,9 @@ import { HealthModule } from './modules/health/health.module';
       isGlobal: true,
       envFilePath: ['.env', '.env.example'],
     }),
+
+    // Cron Jobs
+    ScheduleModule.forRoot(),
 
     // Rate limiting — 100 requests per 60s per IP (default)
     ThrottlerModule.forRoot([
@@ -51,6 +60,11 @@ import { HealthModule } from './modules/health/health.module';
     OrganizationModule,
     SyncModule,
     HealthModule,
+    AnalyticsModule,
+    SupportModule,
+    AIModule,
+    OnboardingModule,
+    TutorialModule,
   ],
   providers: [
     // Apply rate limiting globally to all routes

@@ -1,6 +1,9 @@
 'use client';
 
 import { useDashboardStats } from '@/hooks/useS2L';
+import { useFleetStatus } from '@/hooks/useFleet';
+import { formatDistanceToNow } from 'date-fns';
+import Link from 'next/link';
 
 const statusColors: Record<string, string> = {
     DRAFT: 'bg-[var(--text-muted)]/20 text-[var(--text-secondary)]',
@@ -14,8 +17,17 @@ const statusColors: Record<string, string> = {
     FLAGGED: 'bg-[var(--danger)]/15 text-[var(--danger)]',
 };
 
+const fleetColors: Record<string, string> = {
+    EN_ROUTE: 'bg-emerald-500',
+    LOADING: 'bg-amber-500',
+    DISCHARGING: 'bg-purple-500',
+    IDLE: 'bg-gray-400',
+    MAINTENANCE: 'bg-red-500',
+};
+
 export default function DashboardPage() {
     const { stats, isLoading, error } = useDashboardStats();
+    const { data: fleetData, isLoading: fleetLoading } = useFleetStatus();
 
     const kpiCards = [
         { label: 'Active S2L', value: stats.activeS2L, change: `${stats.submitted} pending review`, color: 'var(--primary)', icon: '🔍' },
@@ -32,7 +44,7 @@ export default function DashboardPage() {
                     <div
                         key={stat.label}
                         className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-5 hover:shadow-lg
-              transition-all duration-300 hover:-translate-y-0.5 animate-fade-in"
+                            transition-all duration-300 hover:-translate-y-0.5 animate-fade-in"
                         style={{ animationDelay: `${i * 80}ms` }}
                     >
                         <div className="flex items-start justify-between">
@@ -77,17 +89,37 @@ export default function DashboardPage() {
                 </div>
             )}
 
+            {/* ── Pending tray ── */}
+            {!isLoading && stats.submitted > 0 && (
+                <div className="bg-[var(--warning)]/10 border border-[var(--warning)]/30 rounded-xl p-4 animate-fade-in flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-[var(--warning)]/20 flex items-center justify-center text-[var(--warning)]">
+                            <span className="text-xl">⚠️</span>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-[var(--text-primary)]">{stats.submitted} Action(s) en attente</h3>
+                            <p className="text-sm text-[var(--text-muted)]">Checklists Safe-to-Load nécessitent l'approbation d'un superviseur.</p>
+                        </div>
+                    </div>
+                    <Link
+                        href="/s2l"
+                        className="px-4 py-2 bg-[var(--warning)] text-white text-sm font-semibold rounded-lg hover:bg-[var(--warning)]/90 transition-colors shadow-sm"
+                    >
+                        Examiner
+                    </Link>
+                </div>
+            )}
+
             {/* ── Tables ── */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 {/* Recent S2L */}
                 <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden animate-fade-in" style={{ animationDelay: '300ms' }}>
                     <div className="px-5 py-4 border-b border-[var(--border)] flex items-center justify-between">
-                        <h3 className="font-semibold text-[var(--text-primary)]">Recent S2L Inspections</h3>
-                        <a href="/s2l" className="text-xs text-[var(--primary)] hover:underline font-medium">View All →</a>
+                        <h3 className="font-semibold text-[var(--text-primary)]">Inspections S2L récentes</h3>
+                        <Link href="/s2l" className="text-xs text-[var(--primary)] hover:underline font-medium">Voir tout →</Link>
                     </div>
                     <div className="divide-y divide-[var(--border)]">
                         {isLoading ? (
-                            // Skeleton loading
                             Array.from({ length: 4 }).map((_, i) => (
                                 <div key={i} className="px-5 py-3 flex items-center gap-3 animate-pulse">
                                     <div className="w-8 h-8 rounded-lg bg-[var(--border)]" />
@@ -100,88 +132,98 @@ export default function DashboardPage() {
                             ))
                         ) : stats.recentS2Ls.length === 0 ? (
                             <div className="px-5 py-8 text-center text-sm text-[var(--text-muted)]">
-                                No S2L inspections yet. Data will appear when drivers submit checklists.
+                                Aucune inspection. Les données apparaîtront dès les soumissions.
                             </div>
                         ) : (
                             stats.recentS2Ls.map((item) => (
-                                <div key={item.id} className="px-5 py-3 flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-[var(--primary)]/10 flex items-center justify-center">
-                                            <span className="text-xs font-bold text-[var(--primary)]">
-                                                {(item.truck?.plate_number ?? item.truck_id ?? '').slice(-3) || '—'}
+                                <Link key={item.id} href={`/s2l/${item.id}`} className="block">
+                                    <div className="px-5 py-3 flex items-center justify-between hover:bg-[var(--surface-hover)] transition-colors cursor-pointer">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-lg bg-[var(--primary)]/10 flex items-center justify-center">
+                                                <span className="text-xs font-bold text-[var(--primary)]">
+                                                    {(item.truck?.plate_number ?? item.truck_id ?? '').slice(-3) || '—'}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium text-[var(--text-primary)] hover:underline">
+                                                    {item.id.slice(0, 8).toUpperCase()}
+                                                </p>
+                                                <p className="text-xs text-[var(--text-muted)]">
+                                                    {item.driver?.full_name ?? 'Inconnu'} • {item.station?.name ?? 'Inconnue'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColors[item.status] ?? ''}`}>
+                                                {item.status}
+                                            </span>
+                                            <span className="text-xs text-[var(--text-muted)] w-12 text-right">
+                                                {new Date(item.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </div>
-                                        <div>
-                                            <p className="text-sm font-medium text-[var(--text-primary)]">
-                                                {item.id.slice(0, 8).toUpperCase()}
-                                            </p>
-                                            <p className="text-xs text-[var(--text-muted)]">
-                                                {item.driver?.full_name ?? 'Unknown'} • {item.station?.name ?? 'Unknown'}
-                                            </p>
-                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColors[item.status] ?? ''}`}>
-                                            {item.status}
-                                        </span>
-                                        <span className="text-xs text-[var(--text-muted)]">
-                                            {new Date(item.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                    </div>
-                                </div>
+                                </Link>
                             ))
                         )}
                     </div>
                 </div>
 
-                {/* Summary Card (Replaces demo manifests until Manifest API is ready) */}
-                <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden animate-fade-in" style={{ animationDelay: '400ms' }}>
+                {/* Fleet Overview Widget */}
+                <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden animate-fade-in flex flex-col" style={{ animationDelay: '400ms' }}>
                     <div className="px-5 py-4 border-b border-[var(--border)] flex items-center justify-between">
-                        <h3 className="font-semibold text-[var(--text-primary)]">S2L Summary</h3>
-                    </div>
-                    <div className="p-5 space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            {[
-                                { label: 'Total Inspections', value: stats.total, color: 'var(--primary)' },
-                                { label: 'Approval Rate', value: stats.total > 0 ? `${Math.round((stats.approved / stats.total) * 100)}%` : '—', color: 'var(--success)' },
-                                { label: 'Active (Draft+Submitted)', value: stats.activeS2L, color: 'var(--warning)' },
-                                { label: 'Rejected', value: stats.rejected, color: 'var(--danger)' },
-                            ].map((item) => (
-                                <div key={item.label} className="bg-[var(--background)] rounded-lg p-4 text-center">
-                                    <p className="text-2xl font-bold" style={{ color: item.color }}>
-                                        {isLoading ? '—' : item.value}
-                                    </p>
-                                    <p className="text-xs text-[var(--text-muted)] mt-1">{item.label}</p>
-                                </div>
-                            ))}
-                        </div>
-                        {!isLoading && stats.submitted > 0 && (
-                            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 flex items-center gap-2">
-                                <span>⏳</span>
-                                <span className="text-sm text-amber-700 dark:text-amber-400">
-                                    {stats.submitted} checklist{stats.submitted !== 1 ? 's' : ''} awaiting supervisor review
-                                </span>
+                        <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-[var(--text-primary)]">Statut de la flotte</h3>
+                            <div className="flex items-center gap-1.5 ml-2">
+                                <span className={`w-2 h-2 rounded-full ${fleetLoading ? 'bg-[var(--warning)]' : 'bg-[var(--success)]'} animate-pulse`} />
+                                <span className="text-xs text-[var(--text-muted)] opacity-70">En direct</span>
                             </div>
+                        </div>
+                        <Link href="/fleet" className="text-xs text-[var(--primary)] hover:underline font-medium">Carte Live →</Link>
+                    </div>
+
+                    <div className="p-5 flex-1 flex flex-col justify-center space-y-5">
+                        {fleetLoading ? (
+                            <div className="space-y-4">
+                                <div className="h-6 w-32 bg-[var(--border)] rounded animate-pulse" />
+                                <div className="flex justify-between gap-2">
+                                    {[1, 2, 3, 4].map(i => <div key={i} className="h-12 flex-1 bg-[var(--border)] rounded animate-pulse" />)}
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="text-center">
+                                    <span className="text-5xl font-black text-[var(--text-primary)] tracking-tight">
+                                        {fleetData?.total_trucks ?? 0}
+                                    </span>
+                                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mt-1">Camions actifs</p>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                                    {Object.entries(fleetData?.status_breakdown || {}).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([status, count]) => (
+                                        <div key={status} className="bg-[var(--background)] border border-[var(--border)] rounded-lg p-3 text-center">
+                                            <div className="flex items-center justify-center gap-1.5 mb-1.5">
+                                                <span className={`w-1.5 h-1.5 rounded-full ${fleetColors[status] || 'bg-[var(--text-muted)]'}`} />
+                                                <span className="text-[10px] font-bold text-[var(--text-secondary)] uppercase">{status.replace('_', ' ')}</span>
+                                            </div>
+                                            <p className="text-lg font-bold text-[var(--text-primary)]">{count}</p>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {fleetData?.trucks && fleetData.trucks.length > 0 && (
+                                    <div className="mt-auto pt-4 border-t border-[var(--border)]">
+                                        <p className="text-xs text-[var(--text-muted)] flex justify-between items-center">
+                                            Dernière mise à jour :
+                                            <span className="font-semibold text-[var(--text-secondary)]">a l'instant</span>
+                                        </p>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
-                </div>
-            </div>
-
-            {/* ── Fleet Overview ── */}
-            <div className="bg-[var(--surface)] rounded-xl border border-[var(--border)] overflow-hidden animate-fade-in" style={{ animationDelay: '500ms' }}>
-                <div className="px-5 py-4 border-b border-[var(--border)] flex items-center justify-between">
-                    <h3 className="font-semibold text-[var(--text-primary)]">Fleet Status • Live</h3>
-                    <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse" />
-                        <span className="text-xs text-[var(--text-muted)]">Real-time</span>
-                    </div>
-                </div>
-                <div className="p-8 text-center text-sm text-[var(--text-muted)]">
-                    <div className="text-3xl mb-3">🗺️</div>
-                    <p className="font-medium text-[var(--text-secondary)]">Fleet tracking coming soon</p>
-                    <p className="text-xs mt-1">WebSocket integration will provide live vehicle positions</p>
                 </div>
             </div>
         </div>
     );
 }
+
